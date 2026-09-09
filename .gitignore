@@ -1,0 +1,17 @@
+# Secretos: nunca subir la llave real
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Entornos y editores
+.idea/
+.vscode/
+.DS_Store
+
+# Datos locales / generados
+reminders.json
