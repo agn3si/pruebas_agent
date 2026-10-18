@@ -12,7 +12,7 @@ load_dotenv()
 
 MODEL = "gemini-3.7-flash"
 
-print("Agentita")
+print("Agente")
 print("Escribe 'salir' para terminar.\n")
 
 client = genai.Client()
@@ -45,5 +45,5 @@ while True:
         iter += 1
 
     else: 
-        print("Llegamos al límite de iteraciones para este mensaje," \
+        print("Llegamos al límite de iteraciones para este mensaje, " \
         "¿quieres seguir? :)")
