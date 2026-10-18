@@ -11,7 +11,11 @@ Tres módulos principales:
 import os
 import json
 import datetime
+import sys
 
+## añade colores a las salidas                   
+MORADO, AZUL, AMARILLO, RESET = "\033[95m", "\033[94m", "\033[93m", "\033[0m"
+##
 
 DATE_FORMAT = "%d-%m-%Y %H:%M"
 
@@ -27,8 +31,8 @@ class Agent:
     def __init__(self, to_do_file="reminders.json"):
         self.setup_tools()
         self.history = []          # memoria de la conversación
-        self.to_do_file = to_do_file
-        self.tasks = self.load_jsons()
+        self.to_do_file = to_do_file # archivo que guarda los pendientes
+        self.tasks = self.load_tasks() 
 
     # ------------------------------------------------------------------
     # 1. Descripción de las herramientas que el modelo puede usar
@@ -117,45 +121,27 @@ class Agent:
                 "type": "function",
                 "name": "to_do_tasks",
                 "description": (
-                    "Crea y elimina recordatorios en memoria local."
+                    "Crea, borra o lista pendientes con fecha. Al listar, separa "
+                    "los que ya vencieron de los vigentes."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "fecha": {
+                        "accion": {
                             "type": "string",
-                            "description": (
-                                "Fecha y hora del pendiente, formato "
-                                "'DD-MM-YYYY HH:MM'"
-                            ),
+                            "enum": ["crear", "borrar", "listar"],
+                            "description": "operación a realizar",
                         },
                         "reminder": {
                             "type": "string",
-                            "description": "El texto que se va a recordar",
+                            "description": "Texto del pendiente (para crear/borrar)",
+                        },
+                        "fecha": {
+                            "type": "string",
+                            "description": f"Fecha y hora, formato '{DATE_FORMAT}' (para crear/borrar)",
                         },
                     },
-                    "required": ["fecha", "reminder"],
-                },
-            },
-            {
-                "type": "function",
-                "name": "verify_task",
-                "description": (
-                    "Revisa la lista de pendientes y verifica"
-                    "si siguen vigentes contrastando con el tiempo."
-                ),
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "actual": {
-                            "type": "string",
-                            "description": (
-                                "Fecha y hora actual, obtenida por default"
-                                "con herramienta 'to_day'."
-                            ),
-                        }
-                    },
-                    "required": [],
+                    "required": ["accion"],
                 },
             },
         ]
@@ -164,14 +150,14 @@ class Agent:
     # 2. Implementación de las herramientas
     # ------------------------------------------------------------------
     def list_files_in_dir(self, directory="."):
-        print("  [herramienta] list_files_in_dir")
+        print(f"{AMARILLO}  [herramienta]{RESET} list_files_in_dir")
         try:
             return {"files": os.listdir(directory)}
         except Exception as e:
             return {"error": str(e)}
 
     def read_file(self, path):
-        print("  [herramienta] read_file")
+        print(f"{AMARILLO}  [herramienta]{RESET} read_file")
         try:
             with open(path, encoding="utf-8") as f:
                 return f.read()
@@ -181,7 +167,7 @@ class Agent:
             return err
 
     def edit_file(self, path, new_text, prev_text=""):
-        print("  [herramienta] edit_file")
+        print(f"{AMARILLO}  [herramienta]{RESET} edit_file")
         try:
             existed = os.path.exists(path)
             if existed and prev_text:
@@ -207,8 +193,8 @@ class Agent:
 
     ########################### mis herramientas
 
-    def load_jsons(self):
-        """Lee archivos json."""
+    def load_tasks(self):
+        """Carga los pendientes guardados en self.to_do_file."""
         if os.path.exists(self.to_do_file):
             try:
                 with open(self.to_do_file, encoding="utf-8") as f:
@@ -218,50 +204,54 @@ class Agent:
         return []
 
     def save_tasks(self):
-        """Persiste la lista de pendientes en disco."""
+        """Guarda self.tasks en self.to_do_file"""
         with open(self.to_do_file, "w", encoding="utf-8") as f:
             json.dump(self.tasks, f, ensure_ascii=False, indent=2)
 
     def to_day(self):
-        print("  [herramienta] to_day")
+        """Regresa la fecha y hora actuales del sistema."""
+        print(f"{AMARILLO}  [herramienta]{RESET} to_day")
         return {"fecha_hora_actual": datetime.datetime.now().strftime(DATE_FORMAT)}
 
-    def to_do_tasks(self, reminder, fecha):
-        print("  [herramienta] to_do_tasks")
-        for task in self.tasks:
-            if task["reminder"] == reminder and task["fecha"] == fecha:
-                self.tasks.remove(task)
-                self.save_tasks()
-                return {"accion": "eliminado", "fecha": fecha, "reminder": reminder}
+    def to_do_tasks(self, accion, reminder=None, fecha=None):
+        """Crea, borra o lista pendientes, según el valor de accion.
+            Al listar, separa los pendientes vencidos de los vigentes."""
+        print(f"{AMARILLO}  [herramienta]{RESET} to_do_tasks ({accion})")
 
-        self.tasks.append({"fecha": fecha, "reminder": reminder})
-        self.save_tasks()
-        return {"accion": "creado", "fecha": fecha, "reminder": reminder}
+        if accion == "crear":
+            if not reminder or not fecha:
+                return {"error": "se requieren 'reminder' y 'fecha' para crear"}
+            self.tasks.append({"reminder": reminder, "fecha": fecha})
+            self.save_tasks()
+            return {"accion": "creado", "fecha": fecha, "reminder": reminder}
 
-    def verify_task(self, actual=None):
-        print("  [herramienta] verify_task")
+        if accion == "borrar":
+            if not reminder or not fecha:
+                return {"error": "se requieren 'reminder' y 'fecha' para borrar"}
+            for task in self.tasks:
+                if task["reminder"] == reminder and task["fecha"] == fecha:
+                    self.tasks.remove(task)
+                    self.save_tasks()
+                    return {"accion": "eliminado", "fecha": fecha, "reminder": reminder}
+            return {"error": "pendiente no encontrado", "fecha": fecha, "reminder": reminder}
 
-        if actual:
-            try:
-                ahora = datetime.datetime.strptime(actual, DATE_FORMAT)
-            except ValueError:
-                ahora = datetime.datetime.now()
-        else:
+        if accion == "listar":
             ahora = datetime.datetime.now()
+            vencidos = []
+            vigentes = []
+            for task in self.tasks:
+                try:
+                    fecha_task = datetime.datetime.strptime(task["fecha"], DATE_FORMAT)
+                except (ValueError, KeyError):
+                    continue
+                if fecha_task <= ahora:
+                    vencidos.append(task)
+                else:
+                    vigentes.append(task)
+            vigentes.sort(key=lambda t: datetime.datetime.strptime(t["fecha"], DATE_FORMAT))
+            return {"pendientes_vencidos": vencidos, "pendientes_vigentes": vigentes}
 
-        vencidos = []
-        vigentes = []
-        for task in self.tasks:
-            try:
-                fecha_task = datetime.datetime.strptime(task["fecha"], DATE_FORMAT)
-            except (ValueError, KeyError):
-                continue
-            if fecha_task <= ahora:
-                vencidos.append(task)
-            else:
-                vigentes.append(task)
-
-        return {"pendientes_vencidos": vencidos, "pendientes_vigentes": vigentes}
+        return {"error": f"acción desconocida: {accion}"}
 
     ##########################
 
@@ -276,8 +266,6 @@ class Agent:
             return self.to_day(**args)
         if name == "to_do_tasks":
             return self.to_do_tasks(**args)
-        if name == "verify_task":
-            return self.verify_task(**args)
         return {"error": f"Herramienta desconocida: {name}"}
 
     # ------------------------------------------------------------------
@@ -304,8 +292,8 @@ class Agent:
 
             called_tool = True
             args = step.arguments or {}
-            print(f"  - El modelo considera llamar a la herramienta {step.name}")
-            print(f"  - Argumentos: {args}")
+            print(f"{AMARILLO}  -{RESET} El modelo considera llamar a la herramienta {step.name}")
+            print(f"{AMARILLO}  -{RESET} Argumentos: {args}")
 
             result = self.run_tool(step.name, args)
 
@@ -323,6 +311,6 @@ class Agent:
 
         # c) Si no hubo herramientas, esta es la respuesta final
         if not called_tool:
-            print(f"Asistente: {interaction.output_text}")
+            print(f"{AZUL}Asistente:{RESET} {interaction.output_text}")
 
         return called_tool

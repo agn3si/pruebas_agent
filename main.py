@@ -6,28 +6,28 @@ Requiere una variable de entorno GEMINI_API_KEY (en un archivo .env).
 from google import genai
 from dotenv import load_dotenv #Este paquete permite leer variables de entorno desde un archivo .env
 
-from agent import Agent
+from agent import Agent, MORADO, RESET
 
 load_dotenv()
 
-MODEL = "gemini-3.6-flash-lite"
+MODEL = "gemini-3.7-flash"
 
-print("Agentito")
+print("Agentita")
 print("Escribe 'salir' para terminar.\n")
 
 client = genai.Client()
 agent = Agent()
 
 while True:
-    max_iter = 5
+    max_iter = 3
     iter = 0
                                        
-    user_input = input("Tú: ").strip()
+    user_input = input(f"{MORADO}Tú:{RESET} ").strip()
 
     if not user_input:
         continue
     if user_input.lower() in ("salir", "exit", "bye", "sayonara", "adiós", "hasta luego","chao","nos vemos","hasta la próxima"):
-        print("¡Hasta luego!")
+        print("Que la suerte siempre esté de tu lado!")
         break
 
     agent.add_user_message(user_input)
